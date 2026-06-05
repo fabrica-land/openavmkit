@@ -548,6 +548,50 @@ def drop_manual_exclusions(
     return sup
 
 
+def flag_dupe_date_price(df_sales: pd.DataFrame, jurisdiction=None) -> pd.DataFrame:
+    """Flag genuine same-parcel duplicate sales sharing a date and price.
+
+    A genuine duplicate is the SAME parcel reported more than once at the same
+    date and price (duplicate data entry / shell trade). DISTINCT parcels that
+    merely share a date and price -- e.g. multiple lots conveyed in a single
+    multi-parcel deed -- are NOT duplicates and must not be flagged (doing so
+    silently discards every lot but one of a subdivision sale). Append the
+    parcel key when present so only true same-parcel repeats are flagged. A
+    missing key would otherwise stringify to "nan" and re-collide across
+    distinct parcels, so null keys fall back to the unique per-sale key.
+
+    Sets ``flag_dupe_date_price`` to True on the duplicate rows and returns the
+    same dataframe. Pure over its input columns (key, key_sale, sale_date,
+    sale_price, and the optional jurisdiction) -- no model-group, time
+    adjustment, or land-area setup required -- so it is unit-testable in
+    isolation from the rest of ``run_heuristics``.
+    """
+    if jurisdiction is not None:
+        date_price = (
+            df_sales[jurisdiction].astype(str)
+            + "---"
+            + df_sales["sale_date"].astype(str)
+            + "---"
+            + df_sales["sale_price"].astype(str)
+        )
+    else:
+        date_price = (
+            df_sales["sale_date"].astype(str)
+            + "---"
+            + df_sales["sale_price"].astype(str)
+        )
+    if "key" in df_sales.columns:
+        parcel_id = df_sales["key"].astype(str)
+        null_key = df_sales["key"].isna()
+        if null_key.any() and "key_sale" in df_sales.columns:
+            parcel_id = parcel_id.mask(null_key, df_sales["key_sale"].astype(str))
+        date_price = date_price + "---" + parcel_id
+    vcs_date_price = date_price.value_counts()
+    idx_dupe_date_price = vcs_date_price[vcs_date_price > 1].index.values
+    df_sales.loc[date_price.isin(idx_dupe_date_price), "flag_dupe_date_price"] = True
+    return df_sales
+
+
 def run_heuristics(
     sup: SalesUniversePair, settings: dict, drop: bool = True, verbose: bool = False
 ) -> SalesUniversePair:
@@ -599,35 +643,10 @@ def run_heuristics(
         else:
             warnings.warn(f"You provided a `deed_id`: \"{deed_id}\", but it wasn't found in in the sales dataframe, so no deed-based sales validation heuristic can be run")
 
-    # 2 -- Flag sales made on the same date for the same price
-    
-    if jurisdiction != None:
-        df_sales["date_price"] = df_sales[jurisdiction].astype(str) + "---" + df_sales["sale_date"].astype(str) + "---" + df_sales["sale_price"].astype(str)
-    else:
-        df_sales["date_price"] = df_sales["sale_date"].astype(str) + "---" + df_sales["sale_price"].astype(str)
-    # A genuine duplicate is the SAME parcel reported more than once at the same
-    # date and price (duplicate data entry / shell trade). DISTINCT parcels that
-    # merely share a date and price -- e.g. multiple lots conveyed in a single
-    # multi-parcel deed -- are NOT duplicates and must not be flagged (doing so
-    # silently discards every lot but one of a subdivision sale). Append the
-    # parcel key when present so only true same-parcel repeats are flagged. A
-    # missing key would otherwise stringify to "nan" and re-collide across
-    # distinct parcels, so null keys fall back to the unique per-sale key.
-    if "key" in df_sales.columns:
-        parcel_id = df_sales["key"].astype(str)
-        null_key = df_sales["key"].isna()
-        if null_key.any() and "key_sale" in df_sales.columns:
-            parcel_id = parcel_id.mask(null_key, df_sales["key_sale"].astype(str))
-        df_sales["date_price"] = df_sales["date_price"] + "---" + parcel_id
-    vcs_date_price = df_sales["date_price"].value_counts()
-    idx_dupe_date_price = vcs_date_price[vcs_date_price > 1].index.values
-    df_sales.loc[
-        df_sales["date_price"].isin(idx_dupe_date_price),
-        "flag_dupe_date_price",
-    ] = True
-    
-    # drop extraneous column
-    df_sales = df_sales.drop(columns="date_price")
+    # 2 -- Flag sales made on the same date for the same price. Extracted to
+    # flag_dupe_date_price so the dedup logic is unit-testable in isolation from
+    # the model-group / land-area machinery below.
+    df_sales = flag_dupe_date_price(df_sales, jurisdiction)
 
     #### Misclassified vacant sales detection heuristics
 
