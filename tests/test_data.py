@@ -877,3 +877,46 @@ def test_boolify_series():
 	series_are_equal(expected_series, str_series_1)
 	series_are_equal(expected_series, str_series_2)
 	series_are_equal(expected_series, str_series_3)
+
+
+def test_enrich_universe_spatial_lag_small_universe_does_not_crash():
+	# Regression (Fabrica ENG-3031): _enrich_universe_spatial_lag built a cKDTree
+	# from the universe and queried k (=5) neighbours with no min-rows guard. When
+	# the universe had fewer training parcels than k, cKDTree.query returned the
+	# out-of-range sentinel index `n_train`, which raised IndexError at
+	# `parcel_values[indices]` and crashed the whole prediction. The sales-side
+	# function already guards (continue when len <= k+1); the universe side did
+	# not. The fix clamps k = min(k, n_train) and returns early when n_train == 0.
+	from openavmkit.data import _enrich_universe_spatial_lag
+	# Two-parcel universe => fewer than k=5 training parcels => the old crash.
+	df_univ = pd.DataFrame({
+		"key": ["a", "b"],
+		"latitude": [38.89, 38.90],
+		"longitude": [-90.18, -90.19],
+		"model_group": ["vacant_land", "vacant_land"],
+		"land_area_sqft": [21780.0, 10890.0],
+		"bldg_area_finished_sqft": [0.0, 0.0],
+	})
+	df_test = pd.DataFrame({"key": pd.Series([], dtype=object)})
+	out = _enrich_universe_spatial_lag(
+		df_univ, df_test, "vacant_land", ["vacant_land"], {}
+	)
+	# No IndexError. Assert the SPECIFIC structural-lag column rather than a
+	# prefix-`any` — the latter would false-green if `area_unit` ever stopped
+	# defaulting to "sqft" and every value_field were skipped (no crash to catch).
+	assert "spatial_lag_land_area_sqft" in out.columns
+	# One training parcel => k clamps to 1 (single nearest neighbour). This is the
+	# most pathological survivor (sparsest non-empty universe) and must not crash.
+	df_one = df_univ.iloc[[0]].copy()
+	df_test_one = pd.DataFrame({"key": pd.Series([], dtype=object)})
+	out_one = _enrich_universe_spatial_lag(
+		df_one, df_test_one, "vacant_land", ["vacant_land"], {}
+	)
+	assert "spatial_lag_land_area_sqft" in out_one.columns
+	# Zero training parcels (every universe row is in the test set) => return the
+	# universe unchanged rather than crash on cKDTree of an empty array.
+	df_test_all = pd.DataFrame({"key": ["a", "b"]})
+	out_empty = _enrich_universe_spatial_lag(
+		df_univ, df_test_all, "vacant_land", ["vacant_land"], {}
+	)
+	assert not any(c.startswith("spatial_lag_") for c in out_empty.columns)
