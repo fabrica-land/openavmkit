@@ -1,5 +1,10 @@
 [build-system]
-requires = ["setuptools>=69", "wheel", "setuptools-scm[toml]>=8"]
+# setuptools-scm pinned <9: the 9.x split into the `vcs_versioning` backend
+# asserts (`assert version is not None`) when deriving a version from a tagless
+# git-SHA install (how fabrica-v3-api's avm worker installs this fork), breaking
+# the Docker image build. 8.x falls back gracefully. Keep this until the build
+# installs a tagged/sdist artifact instead of a bare commit.
+requires = ["setuptools>=69", "wheel", "setuptools-scm[toml]>=8,<9"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -64,5 +69,15 @@ include-package-data = true
 # Derive version from your git tags, e.g. v0.3.0rc2 -> 0.3.0rc2
 version_scheme = "no-guess-dev"
 local_scheme = "node-and-date"
+# Only consider real version tags (vX.Y.Z) when deriving the version. Without
+# this, `git describe` can return a non-version tag (e.g. an `archive/*` marker
+# pushed to this fork), which setuptools-scm cannot parse — it then asserts
+# `version is not None` and the wheel build fails. This breaks every consumer
+# installing the fork from a tagless commit (fabrica-v3-api's avm worker does
+# `openavmkit @ git+...@<sha>`). Matching only version tags makes describe ignore
+# stray tags and fall through to the commit-count dev version, which is fine for
+# a SHA-pinned dependency. fallback_version is a final safety net.
+git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[0-9]*"]
+fallback_version = "0.0.0"
 # (Optional) If you want a vendored version file for src checkouts, uncomment:
 # write_to = "openavmkit/_version.py"
