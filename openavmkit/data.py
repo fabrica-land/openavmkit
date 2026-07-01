@@ -42,7 +42,7 @@ import shapely
 
 from shapely.geometry import Point
 from osmnx import settings
-from joblib import Parallel, delayed
+from joblib import Parallel, cpu_count, delayed
 
 import osmnx as ox
 
@@ -1977,7 +1977,13 @@ def _enrich_df_streets(
     edges = None
 
     t.start("rays_parallel")
-    n_jobs = 8
+    # Bound the loky pool by the effective CPU budget (joblib's cpu_count is
+    # cgroup-quota / affinity / LOKY_MAX_CPU_COUNT aware): each worker is a
+    # full interpreter that loads the geo stack, so oversubscribing a small
+    # container (8 workers on a 2-vCPU / 4 GiB instance) multiplies peak RSS
+    # for zero throughput gain. Results are order-preserved by Parallel, so
+    # ray output is byte-identical for any n_jobs. Cap at the historical 8.
+    n_jobs = max(1, min(8, cpu_count()))
     if verbose:
         print(f"Generating rays for {len(args)} edges with {n_jobs} jobs...")
     results = Parallel(n_jobs=n_jobs, backend="loky", verbose=10 if verbose else 0)(
