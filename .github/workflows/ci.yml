@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "integration" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "integration" ]
 
 jobs:
   test:

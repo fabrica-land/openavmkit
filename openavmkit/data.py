@@ -2371,7 +2371,7 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
             if col not in df:
                 df[col] = pd.Series(0.0, index=df.index, dtype="float64")
             df[col] = (
-                pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+                pd.to_numeric(df[col], errors="raise").fillna(0.0)
                 * conversion_mult
             )
             df.rename(columns={col: f"{stub}{suffix}_{i}"}, inplace=True)
