@@ -119,6 +119,25 @@ def test_enrich_df_streets_roadless_edges_return_default_frontage_columns(
     assert pd.isna(row["osm_road_type_1"])
 
 
+def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    parcels, _edges = _fixture(edge_y_m=500.0)
+    parcels["frontage_1"] = 99.0
+    parcels["depth_1"] = 88.0
+    parcels["dist_to_road_1"] = 77.0
+    _mock_osmnx(monkeypatch, _empty_edges())
+    out = data.enrich_df_streets(
+        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    )
+    row = out.iloc[0]
+    assert row["frontage_ft_1"] == 0.0
+    assert row["depth_ft_1"] == 0.0
+    assert row["dist_to_road_ft_1"] == 0.0
+    assert row["land_area_somers_ft"] == 0.0
+
+
 def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
     tmp_path, monkeypatch
 ):

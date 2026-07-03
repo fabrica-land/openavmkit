@@ -1987,7 +1987,7 @@ def _enrich_df_streets(
 
     if not args:
         print(f"No street edges found, return early")
-        return _finish_df_streets(df_in.copy(), settings)
+        return _finish_df_streets_default(df_in, settings)
 
     t.start("rays_parallel")
     # Bound the loky pool by the effective CPU budget (joblib's cpu_count is
@@ -2009,7 +2009,7 @@ def _enrich_df_streets(
 
     if not rays:
         print(f"No street rays generated, return early")
-        return _finish_df_streets(df_in.copy(), settings)
+        return _finish_df_streets_default(df_in, settings)
 
     rays_gdf = gpd.GeoDataFrame(rays, geometry="geometry", crs=crs_eq)
     rays = None
@@ -2083,7 +2083,7 @@ def _enrich_df_streets(
 
     if ray_par.empty:
         print(f"Ray par is empty, return early")
-        return _finish_df_streets(df_in.copy(), settings)
+        return _finish_df_streets_default(df_in, settings)
 
     t.start("dist")
 
@@ -2423,6 +2423,12 @@ def _prepare_df_for_street_slot_merge(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             pd.to_numeric(df[col], errors="raise")
     drop_cols = [col for col in _street_raw_slot_columns() if col in df]
     return df.drop(columns=drop_cols, errors="ignore")
+
+
+def _finish_df_streets_default(
+    df: gpd.GeoDataFrame, settings: dict
+) -> gpd.GeoDataFrame:
+    return _finish_df_streets(_prepare_df_for_street_slot_merge(df.copy()), settings)
 
 
 def _osm_street_slot_renames() -> dict:
