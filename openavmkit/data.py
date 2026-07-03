@@ -2376,13 +2376,11 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
             )
             df.rename(columns={col: f"{stub}{suffix}_{i}"}, inplace=True)
             print(f"renaming FROM: ({col}) TO: ({stub}{suffix}_{i})")
-
     for stub in ["road_name", "road_type", "road_face", "road_angle"]:
         for i in range(1, 5):
             col = f"{stub}_{i}"
             if col not in df:
                 df[col] = np.nan
-
     df[f"osm_total_frontage{suffix}"] = (
         df[f"frontage{suffix}_1"].fillna(0.0)
         + df[f"frontage{suffix}_2"].fillna(0.0)
