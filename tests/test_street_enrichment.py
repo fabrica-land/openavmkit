@@ -13,6 +13,10 @@ SETTINGS = {
     "locality": {"units": "imperial"},
     "data": {"process": {"enrich": {"streets": {"enabled": True}}}},
 }
+METRIC_SETTINGS = {
+    "locality": {"units": "metric"},
+    "data": {"process": {"enrich": {"streets": {"enabled": True}}}},
+}
 
 
 def _fixture(edge_y_m: float) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
@@ -80,6 +84,29 @@ def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
     assert row["osm_total_frontage_ft"] == 0.0
     assert row["land_area_somers_ft"] == 0.0
     assert pd.isna(row["osm_road_type_1"])
+
+
+def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    parcels, edges = _fixture(edge_y_m=500.0)
+    _mock_osmnx(monkeypatch, edges)
+    out = data.enrich_df_streets(
+        parcels,
+        METRIC_SETTINGS,
+        spacing=5.0,
+        max_ray_length=25.0,
+        network_buffer=600.0,
+    )
+    row = out.iloc[0]
+    assert row["key"] == "subject"
+    assert row["frontage_m_1"] == 0.0
+    assert row["depth_m_1"] == 0.0
+    assert row["dist_to_road_m_1"] == 0.0
+    assert row["osm_total_frontage_m"] == 0.0
+    assert row["land_area_somers_m"] == 0.0
+    assert "land_area_somers_ft" not in out
 
 
 def test_enrich_df_streets_normal_frontage_preserves_first_slot(

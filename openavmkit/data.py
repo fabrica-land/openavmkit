@@ -715,15 +715,25 @@ def enrich_df_streets(
         )
 
         # add somers unit land size normalization using frontage & depth
-        df_out["land_area_somers_ft"] = get_size_in_somers_units_ft(
-            df_out["frontage_ft_1"], df_out["depth_ft_1"]
-        )
+        units = get_short_distance_unit(settings)
+        if units == "ft":
+            df_out["land_area_somers_ft"] = get_size_in_somers_units_ft(
+                df_out["frontage_ft_1"], df_out["depth_ft_1"]
+            )
+        else:
+            df_out["land_area_somers_m"] = _get_size_in_somers_units_m(
+                df_out["frontage_m_1"], df_out["depth_m_1"]
+            )
     else:
         df_out = df_in
         if verbose:
             print(f"Street enrichment disabled. To enable it, add `data.process.enrich.streets.enabled = true` to your settings file.")
 
     return df_out
+
+
+def _get_size_in_somers_units_m(frontage_m, depth_m):
+    return get_size_in_somers_units_ft(frontage_m / 0.3048, depth_m / 0.3048) * 0.3048
 
 
 def enrich_sup_spatial_lag(
@@ -2354,16 +2364,9 @@ def _enrich_df_streets(
     return df_out
 
 
-def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame:
-    units = get_short_distance_unit(settings)
-
-    if units == "ft":
-        conversion_mult = 3.28084
-        suffix = "_ft"
-    else:
-        conversion_mult = 1.0
-        suffix = "_m"
-
+def _fill_df_street_slot_defaults(
+    df: gpd.GeoDataFrame, suffix: str, conversion_mult: float
+) -> gpd.GeoDataFrame:
     stubs = ["frontage", "depth", "dist_to_road"]
     for stub in stubs:
         for i in range(1, 5):
@@ -2381,13 +2384,41 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
             col = f"{stub}_{i}"
             if col not in df:
                 df[col] = np.nan
+    return df
+
+
+def _osm_street_slot_renames() -> dict:
+    stubs_to_prefix = [
+        "frontage",
+        "road_name",
+        "road_type",
+        "road_face",
+        "depth",
+        "dist_to_road",
+        "road_angle",
+    ]
+    renames = {}
+    for stub in stubs_to_prefix:
+        for i in range(1, 5):
+            renames[f"{stub}_{i}"] = f"osm_{stub}_{i}"
+    return renames
+
+
+def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame:
+    units = get_short_distance_unit(settings)
+    if units == "ft":
+        conversion_mult = 3.28084
+        suffix = "_ft"
+    else:
+        conversion_mult = 1.0
+        suffix = "_m"
+    df = _fill_df_street_slot_defaults(df, suffix, conversion_mult)
     df[f"osm_total_frontage{suffix}"] = (
         df[f"frontage{suffix}_1"].fillna(0.0)
         + df[f"frontage{suffix}_2"].fillna(0.0)
         + df[f"frontage{suffix}_3"].fillna(0.0)
         + df[f"frontage{suffix}_4"].fillna(0.0)
     )
-
     for road_type in [
         "motorway",
         "trunk",
@@ -2403,24 +2434,7 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
             df[f"osm_frontage_{road_type}{suffix}"] += df[
                 f"frontage{suffix}_{i}"
             ].where(df[f"road_type_{i}"] == road_type, 0.0)
-
-    stubs_to_prefix = [
-        "frontage",
-        "road_name",
-        "road_type",
-        "road_face",
-        "depth",
-        "dist_to_road",
-        "road_angle",
-    ]
-
-    renames = {}
-    for stub in stubs_to_prefix:
-        for i in range(1, 5):
-            renames[f"{stub}_{i}"] = f"osm_{stub}_{i}"
-
-    df = df.rename(columns=renames)
-
+    df = df.rename(columns=_osm_street_slot_renames())
     return df
 
 
