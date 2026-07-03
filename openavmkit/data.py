@@ -1985,6 +1985,10 @@ def _enrich_df_streets(
     args = list(zip(edges.geometry, edges.road_idx, edges.road_name, edges.road_type))
     edges = None
 
+    if not args:
+        print(f"No street edges found, return early")
+        return _finish_df_streets(df_in.copy(), settings)
+
     t.start("rays_parallel")
     # Bound the loky pool by the effective CPU budget (joblib's cpu_count is
     # cgroup-quota / affinity / LOKY_MAX_CPU_COUNT aware): each worker is a
@@ -2002,6 +2006,10 @@ def _enrich_df_streets(
     # flatten & continue exactly as before
     rays = [r for sub in results for r in sub]
     args = None
+
+    if not rays:
+        print(f"No street rays generated, return early")
+        return _finish_df_streets(df_in.copy(), settings)
 
     rays_gdf = gpd.GeoDataFrame(rays, geometry="geometry", crs=crs_eq)
     rays = None
@@ -2329,7 +2337,8 @@ def _enrich_df_streets(
 
     # ---- merge back and add directions ----
     t.start("merge")
-    out = df_in.merge(final, on="key", how="left")
+    df_merge_in = _prepare_df_for_street_slot_merge(df_in)
+    out = df_merge_in.merge(final, on="key", how="left")
     # compute compass dir for each angle if needed...
 
     t.stop("merge")
@@ -2384,6 +2393,36 @@ def _fill_df_street_slot_defaults(
             if col not in df:
                 df[col] = np.nan
     return df
+
+
+def _street_slot_columns(stubs: list[str]) -> list[str]:
+    return [f"{stub}_{i}" for stub in stubs for i in range(1, 5)]
+
+
+def _street_numeric_slot_columns() -> list[str]:
+    return _street_slot_columns(["frontage", "depth", "dist_to_road"])
+
+
+def _street_raw_slot_columns() -> list[str]:
+    return _street_slot_columns(
+        [
+            "frontage",
+            "road_name",
+            "road_type",
+            "road_face",
+            "depth",
+            "dist_to_road",
+            "road_angle",
+        ]
+    )
+
+
+def _prepare_df_for_street_slot_merge(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    for col in _street_numeric_slot_columns():
+        if col in df:
+            pd.to_numeric(df[col], errors="raise")
+    drop_cols = [col for col in _street_raw_slot_columns() if col in df]
+    return df.drop(columns=drop_cols, errors="ignore")
 
 
 def _osm_street_slot_renames() -> dict:
