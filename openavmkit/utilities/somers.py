@@ -252,8 +252,7 @@ def get_size_in_somers_units_ft(
 
 def get_size_in_somers_units_m(
     frontage_m: np.ndarray | float,
-    depth_m: np.ndarray | float,
-    land_area_sqm: np.ndarray | float,
+    depth_m: np.ndarray | float
 ):
     """
     Get the size of a parcel or parcels in somers unit-meters
@@ -272,5 +271,4 @@ def get_size_in_somers_units_m(
     """
     frontage_ft = frontage_m / 0.3048
     depth_ft = depth_m / 0.3048
-    land_area_sqft = land_area_sqm / 0.092903
-    return get_size_in_somers_units_ft(frontage_ft, depth_ft, land_area_sqft)
+    return get_size_in_somers_units_ft(frontage_ft, depth_ft) * 0.3048

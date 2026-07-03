@@ -128,3 +128,35 @@ def test_enrich_df_streets_normal_frontage_preserves_first_slot(
     assert row["osm_road_type_1"] == "residential"
     assert row["osm_total_frontage_ft"] == pytest.approx(row["frontage_ft_1"])
     assert math.isfinite(row["land_area_somers_ft"])
+
+
+def test_enrich_df_streets_normal_frontage_preserves_metric_somers(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    parcels, edges = _fixture(edge_y_m=30.0)
+    _mock_osmnx(monkeypatch, edges)
+    imperial = data.enrich_df_streets(
+        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    )
+    (tmp_path / "metric").mkdir()
+    monkeypatch.chdir(tmp_path / "metric")
+    _mock_osmnx(monkeypatch, edges)
+    metric = data.enrich_df_streets(
+        parcels,
+        METRIC_SETTINGS,
+        spacing=5.0,
+        max_ray_length=25.0,
+        network_buffer=600.0,
+    )
+    imperial_row = imperial.iloc[0]
+    metric_row = metric.iloc[0]
+    assert metric_row["frontage_m_1"] > 0.0
+    assert metric_row["depth_m_1"] > 0.0
+    assert metric_row["dist_to_road_m_1"] > 0.0
+    assert metric_row["osm_total_frontage_m"] == pytest.approx(
+        metric_row["frontage_m_1"]
+    )
+    assert metric_row["land_area_somers_m"] == pytest.approx(
+        imperial_row["land_area_somers_ft"] * 0.3048
+    )

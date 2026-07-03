@@ -68,7 +68,10 @@ from openavmkit.calculations import (
     perform_tweaks,
 )
 from openavmkit.filters import resolve_filter, select_filter
-from openavmkit.utilities.somers import get_size_in_somers_units_ft
+from openavmkit.utilities.somers import (
+    get_size_in_somers_units_ft,
+    get_size_in_somers_units_m,
+)
 from openavmkit.utilities.cache import get_cached_df, write_cached_df
 from openavmkit.utilities.data import (
     combine_dfs,
@@ -721,7 +724,7 @@ def enrich_df_streets(
                 df_out["frontage_ft_1"], df_out["depth_ft_1"]
             )
         else:
-            df_out["land_area_somers_m"] = _get_size_in_somers_units_m(
+            df_out["land_area_somers_m"] = get_size_in_somers_units_m(
                 df_out["frontage_m_1"], df_out["depth_m_1"]
             )
     else:
@@ -730,10 +733,6 @@ def enrich_df_streets(
             print(f"Street enrichment disabled. To enable it, add `data.process.enrich.streets.enabled = true` to your settings file.")
 
     return df_out
-
-
-def _get_size_in_somers_units_m(frontage_m, depth_m):
-    return get_size_in_somers_units_ft(frontage_m / 0.3048, depth_m / 0.3048) * 0.3048
 
 
 def enrich_sup_spatial_lag(
