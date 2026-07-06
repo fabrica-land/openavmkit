@@ -1819,8 +1819,8 @@ def _enrich_df_streets(
     if os.path.exists("in/osm/streets.parquet"):
         df_streets = pd.read_parquet("in/osm/streets.parquet")
         if _streets_cache_matches_units(df_streets, settings):
-            df_out = df_in.copy()
-            df_out = df_out.merge(df_streets, on="key", how="left")
+            df_merge_in = _prepare_df_for_street_slot_merge(df_in)
+            df_out = df_merge_in.merge(df_streets, on="key", how="left")
             if verbose:
                 print(
                     f"--> found streets in in/osm/streets.parquet, loading from disk!"
@@ -2364,7 +2364,7 @@ def _enrich_df_streets(
     final = None
     out = None
 
-    net_columns = [col for col in df_out if col not in df_in.columns]
+    net_columns = [col for col in df_out if col not in df_merge_in.columns]
     df_net_streets = df_out[["key"] + net_columns]
 
     os.makedirs("in/osm", exist_ok=True)
