@@ -36,11 +36,11 @@ def _fixture(
     to_utm = Transformer.from_crs("EPSG:4326", utm, always_xy=True)
     to_ll = Transformer.from_crs(utm, "EPSG:4326", always_xy=True)
     cx, cy = to_utm.transform(center_lon, center_lat)
-    def polygon_from_offsets(offsets):
-        return Polygon([to_ll.transform(cx + dx, cy + dy) for dx, dy in offsets])
-    def line_from_offsets(offsets):
-        return LineString([to_ll.transform(cx + dx, cy + dy) for dx, dy in offsets])
-    parcel = polygon_from_offsets(
+    def geometry_from_offsets(kind, offsets):
+        points = [to_ll.transform(cx + dx, cy + dy) for dx, dy in offsets]
+        return kind(points)
+    parcel = geometry_from_offsets(
+        Polygon,
         [(-10, -10), (10, -10), (10, 10), (-10, 10), (-10, -10)]
     )
     parcels = gpd.GeoDataFrame(
@@ -51,7 +51,8 @@ def _fixture(
     edges = gpd.GeoDataFrame(
         {"name": ["Mock Road"], "highway": ["residential"], "osmid": [123]},
         geometry=[
-            line_from_offsets(
+            geometry_from_offsets(
+                LineString,
                 [(-edge_half_length_m, edge_y_m), (edge_half_length_m, edge_y_m)]
             )
         ],
@@ -156,16 +157,18 @@ def test_enrich_df_streets_early_returns_default_frontage_columns(
     assert message in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("stale_slots", [RAW_STALE_SLOTS, SUFFIXED_STALE_SLOTS])
 def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, stale_slots
 ):
     out = _enrich_streets(
         tmp_path,
         monkeypatch,
         edge_y_m=500.0,
-        stale_slots=RAW_STALE_SLOTS,
+        stale_slots=stale_slots,
         edges=_empty_edges(),
     )
+    assert out.columns.is_unique
     _assert_default_row(out.iloc[0], "_ft")
 
 
@@ -280,20 +283,6 @@ def test_enrich_df_streets_metric_ignores_imperial_street_cache(
     assert "frontage_m_1" in metric
     assert "land_area_somers_m" in metric
     assert "land_area_somers_ft" not in metric
-
-
-def test_enrich_df_streets_roadless_edges_discard_suffixed_existing_slots(
-    tmp_path, monkeypatch
-):
-    out = _enrich_streets(
-        tmp_path,
-        monkeypatch,
-        edge_y_m=500.0,
-        stale_slots=SUFFIXED_STALE_SLOTS,
-        edges=_empty_edges(),
-    )
-    assert out.columns.is_unique
-    _assert_default_row(out.iloc[0], "_ft")
 
 
 def test_enrich_df_streets_cache_discards_suffixed_existing_slots(
