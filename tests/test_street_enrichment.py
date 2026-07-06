@@ -18,15 +18,10 @@ METRIC_SETTINGS = {
     "data": {"process": {"enrich": {"streets": {"enabled": True}}}},
 }
 SUBJECT_KEY = "06071-062124-0000:subject"
-RAW_STALE_SLOTS = {
-    "frontage_1": 99.0,
-    "depth_1": 88.0,
-    "dist_to_road_1": 77.0,
-}
+STALE_SLOT_VALUES = {"frontage": 99.0, "depth": 88.0, "dist_to_road": 77.0}
+RAW_STALE_SLOTS = {f"{stub}_1": value for stub, value in STALE_SLOT_VALUES.items()}
 SUFFIXED_STALE_SLOTS = {
-    "frontage_ft_1": 99.0,
-    "depth_ft_1": 88.0,
-    "dist_to_road_ft_1": 77.0,
+    f"{stub}_ft_1": value for stub, value in STALE_SLOT_VALUES.items()
 }
 
 
@@ -171,11 +166,7 @@ def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
         stale_slots=RAW_STALE_SLOTS,
         edges=_empty_edges(),
     )
-    row = out.iloc[0]
-    assert row["frontage_ft_1"] == 0.0
-    assert row["depth_ft_1"] == 0.0
-    assert row["dist_to_road_ft_1"] == 0.0
-    assert row["land_area_somers_ft"] == 0.0
+    _assert_default_row(out.iloc[0], "_ft")
 
 
 def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
