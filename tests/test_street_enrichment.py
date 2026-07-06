@@ -18,6 +18,11 @@ METRIC_SETTINGS = {
     "data": {"process": {"enrich": {"streets": {"enabled": True}}}},
 }
 SUBJECT_KEY = "06071-062124-0000:subject"
+RAW_STALE_SLOTS = {
+    "frontage_1": 99.0,
+    "depth_1": 88.0,
+    "dist_to_road_1": 77.0,
+}
 SUFFIXED_STALE_SLOTS = {
     "frontage_ft_1": 99.0,
     "depth_ft_1": 88.0,
@@ -113,13 +118,13 @@ def _enrich_streets(
     )
 
 
-def _assert_default_imperial_row(row: pd.Series) -> None:
+def _assert_default_row(row: pd.Series, suffix: str) -> None:
     assert row["key"] == SUBJECT_KEY
-    assert row["frontage_ft_1"] == 0.0
-    assert row["depth_ft_1"] == 0.0
-    assert row["dist_to_road_ft_1"] == 0.0
-    assert row["osm_total_frontage_ft"] == 0.0
-    assert row["land_area_somers_ft"] == 0.0
+    assert row[f"frontage{suffix}_1"] == 0.0
+    assert row[f"depth{suffix}_1"] == 0.0
+    assert row[f"dist_to_road{suffix}_1"] == 0.0
+    assert row[f"osm_total_frontage{suffix}"] == 0.0
+    assert row[f"land_area_somers{suffix}"] == 0.0
     assert pd.isna(row["osm_road_type_1"])
 
 
@@ -130,7 +135,7 @@ def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
     _assert_street_contract(out)
     row = out.iloc[0]
     assert row["frontage_ft_4"] == 0.0
-    _assert_default_imperial_row(row)
+    _assert_default_row(row, "_ft")
     assert "Ray par is empty, return early" in capsys.readouterr().out
 
 
@@ -152,7 +157,7 @@ def test_enrich_df_streets_early_returns_default_frontage_columns(
 ):
     out = _enrich_streets(tmp_path, monkeypatch, **kwargs)
     _assert_street_contract(out)
-    _assert_default_imperial_row(out.iloc[0])
+    _assert_default_row(out.iloc[0], "_ft")
     assert message in capsys.readouterr().out
 
 
@@ -163,7 +168,7 @@ def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
         tmp_path,
         monkeypatch,
         edge_y_m=500.0,
-        stale_slots={"frontage_1": 99.0, "depth_1": 88.0, "dist_to_road_1": 77.0},
+        stale_slots=RAW_STALE_SLOTS,
         edges=_empty_edges(),
     )
     row = out.iloc[0]
@@ -180,12 +185,7 @@ def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
         tmp_path, monkeypatch, edge_y_m=500.0, settings=METRIC_SETTINGS
     )
     row = out.iloc[0]
-    assert row["key"] == SUBJECT_KEY
-    assert row["frontage_m_1"] == 0.0
-    assert row["depth_m_1"] == 0.0
-    assert row["dist_to_road_m_1"] == 0.0
-    assert row["osm_total_frontage_m"] == 0.0
-    assert row["land_area_somers_m"] == 0.0
+    _assert_default_row(row, "_m")
     assert "land_area_somers_ft" not in out
 
 
@@ -212,7 +212,7 @@ def test_enrich_df_streets_normal_frontage_discards_stale_existing_slots(
         tmp_path,
         monkeypatch,
         edge_y_m=30.0,
-        stale_slots={"frontage_1": 99.0, "depth_1": 88.0, "dist_to_road_1": 77.0},
+        stale_slots=RAW_STALE_SLOTS,
     )
     row = out.iloc[0]
     cached = pd.read_parquet(tmp_path / "in/osm/streets.parquet")
@@ -302,7 +302,7 @@ def test_enrich_df_streets_roadless_edges_discard_suffixed_existing_slots(
         edges=_empty_edges(),
     )
     assert out.columns.is_unique
-    _assert_default_imperial_row(out.iloc[0])
+    _assert_default_row(out.iloc[0], "_ft")
 
 
 def test_enrich_df_streets_cache_discards_suffixed_existing_slots(
@@ -332,4 +332,4 @@ def test_enrich_df_streets_ignores_partial_street_cache(tmp_path, monkeypatch):
         tmp_path, monkeypatch, edge_y_m=500.0, edges=_empty_edges()
     )
     assert first.iloc[0]["frontage_ft_1"] > 0.0
-    _assert_default_imperial_row(second.iloc[0])
+    _assert_default_row(second.iloc[0], "_ft")
