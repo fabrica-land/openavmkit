@@ -20,7 +20,9 @@ METRIC_SETTINGS = {
 SUBJECT_KEY = "06071-062124-0000:subject"
 
 
-def _fixture(edge_y_m: float) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+def _fixture(
+    edge_y_m: float, edge_half_length_m: float = 80.0
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     center_lon = -116.05
     center_lat = 34.15
     utm = CRS.from_user_input(
@@ -43,7 +45,11 @@ def _fixture(edge_y_m: float) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     )
     edges = gpd.GeoDataFrame(
         {"name": ["Mock Road"], "highway": ["residential"], "osmid": [123]},
-        geometry=[line_from_offsets([(-80, edge_y_m), (80, edge_y_m)])],
+        geometry=[
+            line_from_offsets(
+                [(-edge_half_length_m, edge_y_m), (edge_half_length_m, edge_y_m)]
+            )
+        ],
         crs="EPSG:4326",
     )
     return parcels, edges
@@ -78,45 +84,64 @@ def _assert_street_contract(out: gpd.GeoDataFrame) -> None:
     assert "land_area_somers_ft" in out
 
 
-def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
-    tmp_path, monkeypatch
-):
+def _enrich_streets(
+    tmp_path,
+    monkeypatch,
+    edge_y_m: float,
+    settings: dict = SETTINGS,
+    edges: gpd.GeoDataFrame | None = None,
+    edge_half_length_m: float = 80.0,
+) -> gpd.GeoDataFrame:
     monkeypatch.chdir(tmp_path)
-    parcels, edges = _fixture(edge_y_m=500.0)
-    _mock_osmnx(monkeypatch, edges)
-    out = data.enrich_df_streets(
-        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    parcels, fixture_edges = _fixture(edge_y_m, edge_half_length_m=edge_half_length_m)
+    _mock_osmnx(monkeypatch, edges if edges is not None else fixture_edges)
+    return data.enrich_df_streets(
+        parcels,
+        settings,
+        spacing=5.0,
+        max_ray_length=25.0,
+        network_buffer=600.0,
     )
-    _assert_street_contract(out)
-    row = out.iloc[0]
+
+
+def _assert_default_imperial_row(row: pd.Series) -> None:
     assert row["key"] == SUBJECT_KEY
     assert row["frontage_ft_1"] == 0.0
-    assert row["frontage_ft_4"] == 0.0
     assert row["depth_ft_1"] == 0.0
     assert row["dist_to_road_ft_1"] == 0.0
     assert row["osm_total_frontage_ft"] == 0.0
     assert row["land_area_somers_ft"] == 0.0
     assert pd.isna(row["osm_road_type_1"])
+
+
+def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
+    tmp_path, monkeypatch
+):
+    out = _enrich_streets(tmp_path, monkeypatch, edge_y_m=500.0)
+    _assert_street_contract(out)
+    row = out.iloc[0]
+    assert row["frontage_ft_4"] == 0.0
+    _assert_default_imperial_row(row)
 
 
 def test_enrich_df_streets_roadless_edges_return_default_frontage_columns(
     tmp_path, monkeypatch
 ):
-    monkeypatch.chdir(tmp_path)
-    parcels, _edges = _fixture(edge_y_m=500.0)
-    _mock_osmnx(monkeypatch, _empty_edges())
-    out = data.enrich_df_streets(
-        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    out = _enrich_streets(
+        tmp_path, monkeypatch, edge_y_m=500.0, edges=_empty_edges()
     )
     _assert_street_contract(out)
-    row = out.iloc[0]
-    assert row["key"] == SUBJECT_KEY
-    assert row["frontage_ft_1"] == 0.0
-    assert row["depth_ft_1"] == 0.0
-    assert row["dist_to_road_ft_1"] == 0.0
-    assert row["osm_total_frontage_ft"] == 0.0
-    assert row["land_area_somers_ft"] == 0.0
-    assert pd.isna(row["osm_road_type_1"])
+    _assert_default_imperial_row(out.iloc[0])
+
+
+def test_enrich_df_streets_short_edges_return_default_frontage_columns(
+    tmp_path, monkeypatch
+):
+    out = _enrich_streets(
+        tmp_path, monkeypatch, edge_y_m=30.0, edge_half_length_m=0.25
+    )
+    _assert_street_contract(out)
+    _assert_default_imperial_row(out.iloc[0])
 
 
 def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
@@ -141,15 +166,8 @@ def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
 def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
     tmp_path, monkeypatch
 ):
-    monkeypatch.chdir(tmp_path)
-    parcels, edges = _fixture(edge_y_m=500.0)
-    _mock_osmnx(monkeypatch, edges)
-    out = data.enrich_df_streets(
-        parcels,
-        METRIC_SETTINGS,
-        spacing=5.0,
-        max_ray_length=25.0,
-        network_buffer=600.0,
+    out = _enrich_streets(
+        tmp_path, monkeypatch, edge_y_m=500.0, settings=METRIC_SETTINGS
     )
     row = out.iloc[0]
     assert row["key"] == SUBJECT_KEY
@@ -164,12 +182,7 @@ def test_enrich_df_streets_empty_ray_returns_metric_somers_columns(
 def test_enrich_df_streets_normal_frontage_preserves_first_slot(
     tmp_path, monkeypatch
 ):
-    monkeypatch.chdir(tmp_path)
-    parcels, edges = _fixture(edge_y_m=30.0)
-    _mock_osmnx(monkeypatch, edges)
-    out = data.enrich_df_streets(
-        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
-    )
+    out = _enrich_streets(tmp_path, monkeypatch, edge_y_m=30.0)
     _assert_street_contract(out)
     row = out.iloc[0]
     assert row["key"] == SUBJECT_KEY
@@ -180,6 +193,25 @@ def test_enrich_df_streets_normal_frontage_preserves_first_slot(
     assert row["osm_road_type_1"] == "residential"
     assert row["osm_total_frontage_ft"] == pytest.approx(row["frontage_ft_1"])
     assert math.isfinite(row["land_area_somers_ft"])
+
+
+def test_enrich_df_streets_normal_frontage_discards_stale_existing_slots(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    parcels, edges = _fixture(edge_y_m=30.0)
+    parcels["frontage_1"] = 99.0
+    parcels["depth_1"] = 88.0
+    parcels["dist_to_road_1"] = 77.0
+    _mock_osmnx(monkeypatch, edges)
+    out = data.enrich_df_streets(
+        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    )
+    row = out.iloc[0]
+    assert row["frontage_ft_1"] > 0.0
+    assert row["frontage_ft_1"] != pytest.approx(99.0 * 3.28084)
+    assert row["depth_ft_1"] != pytest.approx(88.0 * 3.28084)
+    assert row["dist_to_road_ft_1"] != pytest.approx(77.0 * 3.28084)
 
 
 def test_enrich_df_streets_normal_frontage_rejects_malformed_existing_slot(
@@ -202,21 +234,10 @@ def test_enrich_df_streets_normal_frontage_rejects_malformed_existing_slot(
 def test_enrich_df_streets_normal_frontage_preserves_metric_somers(
     tmp_path, monkeypatch
 ):
-    monkeypatch.chdir(tmp_path)
-    parcels, edges = _fixture(edge_y_m=30.0)
-    _mock_osmnx(monkeypatch, edges)
-    imperial = data.enrich_df_streets(
-        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
-    )
+    imperial = _enrich_streets(tmp_path, monkeypatch, edge_y_m=30.0)
     (tmp_path / "metric").mkdir()
-    monkeypatch.chdir(tmp_path / "metric")
-    _mock_osmnx(monkeypatch, edges)
-    metric = data.enrich_df_streets(
-        parcels,
-        METRIC_SETTINGS,
-        spacing=5.0,
-        max_ray_length=25.0,
-        network_buffer=600.0,
+    metric = _enrich_streets(
+        tmp_path / "metric", monkeypatch, edge_y_m=30.0, settings=METRIC_SETTINGS
     )
     imperial_row = imperial.iloc[0]
     metric_row = metric.iloc[0]
@@ -229,3 +250,32 @@ def test_enrich_df_streets_normal_frontage_preserves_metric_somers(
     assert metric_row["land_area_somers_m"] == pytest.approx(
         imperial_row["land_area_somers_ft"] * 0.3048
     )
+
+
+def test_enrich_df_streets_metric_ignores_imperial_street_cache(
+    tmp_path, monkeypatch
+):
+    imperial = _enrich_streets(tmp_path, monkeypatch, edge_y_m=30.0)
+    metric = _enrich_streets(
+        tmp_path, monkeypatch, edge_y_m=30.0, settings=METRIC_SETTINGS
+    )
+    assert "frontage_ft_1" in imperial
+    assert "frontage_m_1" in metric
+    assert "land_area_somers_m" in metric
+    assert "land_area_somers_ft" not in metric
+
+
+def test_enrich_df_streets_roadless_edges_discard_suffixed_existing_slots(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    parcels, _edges = _fixture(edge_y_m=500.0)
+    parcels["frontage_ft_1"] = 99.0
+    parcels["depth_ft_1"] = 88.0
+    parcels["dist_to_road_ft_1"] = 77.0
+    _mock_osmnx(monkeypatch, _empty_edges())
+    out = data.enrich_df_streets(
+        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
+    )
+    assert out.columns.is_unique
+    _assert_default_imperial_row(out.iloc[0])

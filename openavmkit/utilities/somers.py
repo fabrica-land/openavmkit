@@ -269,6 +269,4 @@ def get_size_in_somers_units_m(
     np.ndarray | float
         The converted value in somers unit-meters
     """
-    frontage_ft = frontage_m / 0.3048
-    depth_ft = depth_m / 0.3048
-    return get_size_in_somers_units_ft(frontage_ft, depth_ft) * 0.3048
+    return get_depth_percent_m(depth_m) * frontage_m

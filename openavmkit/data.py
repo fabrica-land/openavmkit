@@ -721,11 +721,13 @@ def enrich_df_streets(
         units = get_short_distance_unit(settings)
         if units == "ft":
             df_out["land_area_somers_ft"] = get_size_in_somers_units_ft(
-                df_out["frontage_ft_1"], df_out["depth_ft_1"]
+                frontage_ft=df_out["frontage_ft_1"],
+                depth_ft=df_out["depth_ft_1"],
             )
         else:
             df_out["land_area_somers_m"] = get_size_in_somers_units_m(
-                df_out["frontage_m_1"], df_out["depth_m_1"]
+                frontage_m=df_out["frontage_m_1"],
+                depth_m=df_out["depth_m_1"],
             )
     else:
         df_out = df_in
@@ -1816,7 +1818,7 @@ def _enrich_df_streets(
 
     if os.path.exists("in/osm/streets.parquet"):
         df_streets = pd.read_parquet("in/osm/streets.parquet")
-        if "key" in df_streets:
+        if _streets_cache_matches_units(df_streets, settings):
             df_out = df_in.copy()
             df_out = df_out.merge(df_streets, on="key", how="left")
             if verbose:
@@ -2372,11 +2374,33 @@ def _enrich_df_streets(
     return df_out
 
 
+_STREET_NUMERIC_STUBS = ["frontage", "depth", "dist_to_road"]
+_STREET_METADATA_STUBS = ["road_name", "road_type", "road_face", "road_angle"]
+_STREET_RAW_STUBS = _STREET_NUMERIC_STUBS + _STREET_METADATA_STUBS
+_STREET_SUFFIXES = ["_ft", "_m"]
+_STREET_ROAD_TYPES = [
+    "motorway",
+    "trunk",
+    "primary",
+    "secondary",
+    "tertiary",
+    "residential",
+    "service",
+    "unclassified",
+]
+
+
+def _street_unit_config(settings: dict) -> tuple[float, str]:
+    units = get_short_distance_unit(settings)
+    if units == "ft":
+        return 3.28084, "_ft"
+    return 1.0, "_m"
+
+
 def _fill_df_street_slot_defaults(
     df: gpd.GeoDataFrame, suffix: str, conversion_mult: float
 ) -> gpd.GeoDataFrame:
-    stubs = ["frontage", "depth", "dist_to_road"]
-    for stub in stubs:
+    for stub in _STREET_NUMERIC_STUBS:
         for i in range(1, 5):
             col = f"{stub}_{i}"
             if col not in df:
@@ -2387,7 +2411,7 @@ def _fill_df_street_slot_defaults(
             )
             df.rename(columns={col: f"{stub}{suffix}_{i}"}, inplace=True)
             print(f"renaming FROM: ({col}) TO: ({stub}{suffix}_{i})")
-    for stub in ["road_name", "road_type", "road_face", "road_angle"]:
+    for stub in _STREET_METADATA_STUBS:
         for i in range(1, 5):
             col = f"{stub}_{i}"
             if col not in df:
@@ -2400,62 +2424,79 @@ def _street_slot_columns(stubs: list[str]) -> list[str]:
 
 
 def _street_numeric_slot_columns() -> list[str]:
-    return _street_slot_columns(["frontage", "depth", "dist_to_road"])
+    return _street_slot_columns(_STREET_NUMERIC_STUBS)
 
 
 def _street_raw_slot_columns() -> list[str]:
-    return _street_slot_columns(
-        [
-            "frontage",
-            "road_name",
-            "road_type",
-            "road_face",
-            "depth",
-            "dist_to_road",
-            "road_angle",
-        ]
+    return _street_slot_columns(_STREET_RAW_STUBS)
+
+
+def _street_output_slot_columns() -> list[str]:
+    cols = []
+    for suffix in _STREET_SUFFIXES:
+        cols.extend(
+            f"{stub}{suffix}_{i}"
+            for stub in _STREET_NUMERIC_STUBS
+            for i in range(1, 5)
+        )
+        cols.append(f"osm_total_frontage{suffix}")
+        cols.extend(
+            f"osm_frontage_{road_type}{suffix}"
+            for road_type in _STREET_ROAD_TYPES
+        )
+        cols.append(f"land_area_somers{suffix}")
+    cols.extend(
+        f"osm_{stub}_{i}"
+        for stub in _STREET_METADATA_STUBS
+        for i in range(1, 5)
     )
+    return cols
 
 
 def _prepare_df_for_street_slot_merge(df: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     for col in _street_numeric_slot_columns():
         if col in df:
             pd.to_numeric(df[col], errors="raise")
-    drop_cols = [col for col in _street_raw_slot_columns() if col in df]
+    drop_cols = [
+        col
+        for col in _street_raw_slot_columns() + _street_output_slot_columns()
+        if col in df
+    ]
     return df.drop(columns=drop_cols, errors="ignore")
 
 
 def _finish_df_streets_default(
     df: gpd.GeoDataFrame, settings: dict
 ) -> gpd.GeoDataFrame:
-    return _finish_df_streets(_prepare_df_for_street_slot_merge(df.copy()), settings)
+    _conversion_mult, suffix = _street_unit_config(settings)
+    df = df.drop(
+        columns=_street_raw_slot_columns() + _street_output_slot_columns(),
+        errors="ignore",
+    ).copy()
+    for stub in _STREET_NUMERIC_STUBS:
+        for i in range(1, 5):
+            df[f"{stub}{suffix}_{i}"] = pd.Series(0.0, index=df.index, dtype="float64")
+    for stub in _STREET_METADATA_STUBS:
+        for i in range(1, 5):
+            df[f"osm_{stub}_{i}"] = np.nan
+    df[f"osm_total_frontage{suffix}"] = pd.Series(0.0, index=df.index, dtype="float64")
+    for road_type in _STREET_ROAD_TYPES:
+        df[f"osm_frontage_{road_type}{suffix}"] = pd.Series(
+            0.0, index=df.index, dtype="float64"
+        )
+    return df
 
 
 def _osm_street_slot_renames() -> dict:
-    stubs_to_prefix = [
-        "frontage",
-        "road_name",
-        "road_type",
-        "road_face",
-        "depth",
-        "dist_to_road",
-        "road_angle",
-    ]
     renames = {}
-    for stub in stubs_to_prefix:
+    for stub in _STREET_RAW_STUBS:
         for i in range(1, 5):
             renames[f"{stub}_{i}"] = f"osm_{stub}_{i}"
     return renames
 
 
 def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame:
-    units = get_short_distance_unit(settings)
-    if units == "ft":
-        conversion_mult = 3.28084
-        suffix = "_ft"
-    else:
-        conversion_mult = 1.0
-        suffix = "_m"
+    conversion_mult, suffix = _street_unit_config(settings)
     df = _fill_df_street_slot_defaults(df, suffix, conversion_mult)
     df[f"osm_total_frontage{suffix}"] = (
         df[f"frontage{suffix}_1"].fillna(0.0)
@@ -2463,16 +2504,7 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
         + df[f"frontage{suffix}_3"].fillna(0.0)
         + df[f"frontage{suffix}_4"].fillna(0.0)
     )
-    for road_type in [
-        "motorway",
-        "trunk",
-        "primary",
-        "secondary",
-        "tertiary",
-        "residential",
-        "service",
-        "unclassified",
-    ]:
+    for road_type in _STREET_ROAD_TYPES:
         df[f"osm_frontage_{road_type}{suffix}"] = 0.0
         for i in range(1, 5):
             df[f"osm_frontage_{road_type}{suffix}"] += df[
@@ -2480,6 +2512,12 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
             ].where(df[f"road_type_{i}"] == road_type, 0.0)
     df = df.rename(columns=_osm_street_slot_renames())
     return df
+
+
+def _streets_cache_matches_units(df_streets: pd.DataFrame, settings: dict) -> bool:
+    _conversion_mult, suffix = _street_unit_config(settings)
+    required_cols = ["key", f"frontage{suffix}_1", f"depth{suffix}_1"]
+    return all(col in df_streets for col in required_cols)
 
 
 def _identify_parcels_with_holes(
