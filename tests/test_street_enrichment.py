@@ -18,6 +18,11 @@ METRIC_SETTINGS = {
     "data": {"process": {"enrich": {"streets": {"enabled": True}}}},
 }
 SUBJECT_KEY = "06071-062124-0000:subject"
+SUFFIXED_STALE_SLOTS = {
+    "frontage_ft_1": 99.0,
+    "depth_ft_1": 88.0,
+    "dist_to_road_ft_1": 77.0,
+}
 
 
 def _fixture(
@@ -225,11 +230,7 @@ def test_enrich_df_streets_normal_frontage_writes_cache_with_suffixed_stale_slot
         tmp_path,
         monkeypatch,
         edge_y_m=30.0,
-        stale_slots={
-            "frontage_ft_1": 99.0,
-            "depth_ft_1": 88.0,
-            "dist_to_road_ft_1": 77.0,
-        },
+        stale_slots=SUFFIXED_STALE_SLOTS,
     )
     cached = pd.read_parquet(tmp_path / "in/osm/streets.parquet")
     assert out.iloc[0]["frontage_ft_1"] > 0.0
@@ -297,11 +298,7 @@ def test_enrich_df_streets_roadless_edges_discard_suffixed_existing_slots(
         tmp_path,
         monkeypatch,
         edge_y_m=500.0,
-        stale_slots={
-            "frontage_ft_1": 99.0,
-            "depth_ft_1": 88.0,
-            "dist_to_road_ft_1": 77.0,
-        },
+        stale_slots=SUFFIXED_STALE_SLOTS,
         edges=_empty_edges(),
     )
     assert out.columns.is_unique
@@ -316,11 +313,7 @@ def test_enrich_df_streets_cache_discards_suffixed_existing_slots(
         tmp_path,
         monkeypatch,
         edge_y_m=30.0,
-        stale_slots={
-            "frontage_ft_1": 99.0,
-            "depth_ft_1": 88.0,
-            "dist_to_road_ft_1": 77.0,
-        },
+        stale_slots=SUFFIXED_STALE_SLOTS,
         edges=_empty_edges(),
     )
     row = out.iloc[0]
