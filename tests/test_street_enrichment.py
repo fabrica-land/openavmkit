@@ -91,9 +91,13 @@ def _enrich_streets(
     settings: dict = SETTINGS,
     edges: gpd.GeoDataFrame | None = None,
     edge_half_length_m: float = 80.0,
+    stale_slots: dict[str, object] | None = None,
 ) -> gpd.GeoDataFrame:
     monkeypatch.chdir(tmp_path)
     parcels, fixture_edges = _fixture(edge_y_m, edge_half_length_m=edge_half_length_m)
+    if stale_slots is not None:
+        for col, value in stale_slots.items():
+            parcels[col] = value
     _mock_osmnx(monkeypatch, edges if edges is not None else fixture_edges)
     return data.enrich_df_streets(
         parcels,
@@ -112,23 +116,6 @@ def _assert_default_imperial_row(row: pd.Series) -> None:
     assert row["osm_total_frontage_ft"] == 0.0
     assert row["land_area_somers_ft"] == 0.0
     assert pd.isna(row["osm_road_type_1"])
-
-
-def _enrich_with_stale_slots(
-    tmp_path,
-    monkeypatch,
-    edge_y_m: float,
-    stale_slots: dict[str, object],
-    edges: gpd.GeoDataFrame | None = None,
-) -> gpd.GeoDataFrame:
-    monkeypatch.chdir(tmp_path)
-    parcels, fixture_edges = _fixture(edge_y_m=edge_y_m)
-    for col, value in stale_slots.items():
-        parcels[col] = value
-    _mock_osmnx(monkeypatch, edges if edges is not None else fixture_edges)
-    return data.enrich_df_streets(
-        parcels, SETTINGS, spacing=5.0, max_ray_length=25.0, network_buffer=600.0
-    )
 
 
 def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
@@ -167,7 +154,7 @@ def test_enrich_df_streets_short_edges_return_default_frontage_columns(
 def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
     tmp_path, monkeypatch
 ):
-    out = _enrich_with_stale_slots(
+    out = _enrich_streets(
         tmp_path,
         monkeypatch,
         edge_y_m=500.0,
@@ -216,7 +203,7 @@ def test_enrich_df_streets_normal_frontage_preserves_first_slot(
 def test_enrich_df_streets_normal_frontage_discards_stale_existing_slots(
     tmp_path, monkeypatch
 ):
-    out = _enrich_with_stale_slots(
+    out = _enrich_streets(
         tmp_path,
         monkeypatch,
         edge_y_m=30.0,
@@ -229,6 +216,27 @@ def test_enrich_df_streets_normal_frontage_discards_stale_existing_slots(
     assert row["depth_ft_1"] != pytest.approx(88.0 * 3.28084)
     assert row["dist_to_road_ft_1"] != pytest.approx(77.0 * 3.28084)
     assert "frontage_ft_1" in cached
+
+
+def test_enrich_df_streets_normal_frontage_writes_cache_with_suffixed_stale_slots(
+    tmp_path, monkeypatch
+):
+    out = _enrich_streets(
+        tmp_path,
+        monkeypatch,
+        edge_y_m=30.0,
+        stale_slots={
+            "frontage_ft_1": 99.0,
+            "depth_ft_1": 88.0,
+            "dist_to_road_ft_1": 77.0,
+        },
+    )
+    cached = pd.read_parquet(tmp_path / "in/osm/streets.parquet")
+    assert out.iloc[0]["frontage_ft_1"] > 0.0
+    assert "frontage_ft_1" in cached
+    assert "depth_ft_1" in cached
+    assert "dist_to_road_ft_1" in cached
+    assert "osm_road_type_1" in cached
 
 
 def test_enrich_df_streets_normal_frontage_rejects_malformed_existing_slot(
@@ -285,7 +293,7 @@ def test_enrich_df_streets_metric_ignores_imperial_street_cache(
 def test_enrich_df_streets_roadless_edges_discard_suffixed_existing_slots(
     tmp_path, monkeypatch
 ):
-    out = _enrich_with_stale_slots(
+    out = _enrich_streets(
         tmp_path,
         monkeypatch,
         edge_y_m=500.0,
@@ -304,7 +312,7 @@ def test_enrich_df_streets_cache_discards_suffixed_existing_slots(
     tmp_path, monkeypatch
 ):
     _enrich_streets(tmp_path, monkeypatch, edge_y_m=30.0)
-    out = _enrich_with_stale_slots(
+    out = _enrich_streets(
         tmp_path,
         monkeypatch,
         edge_y_m=30.0,
@@ -320,3 +328,15 @@ def test_enrich_df_streets_cache_discards_suffixed_existing_slots(
     assert "frontage_ft_1_x" not in out
     assert "frontage_ft_1_y" not in out
     assert row["frontage_ft_1"] > 0.0
+
+
+def test_enrich_df_streets_ignores_partial_street_cache(tmp_path, monkeypatch):
+    first = _enrich_streets(tmp_path, monkeypatch, edge_y_m=30.0)
+    partial = pd.read_parquet(tmp_path / "in/osm/streets.parquet")
+    partial = partial[["key", "frontage_ft_1", "depth_ft_1"]]
+    partial.to_parquet(tmp_path / "in/osm/streets.parquet")
+    second = _enrich_streets(
+        tmp_path, monkeypatch, edge_y_m=500.0, edges=_empty_edges()
+    )
+    assert first.iloc[0]["frontage_ft_1"] > 0.0
+    _assert_default_imperial_row(second.iloc[0])

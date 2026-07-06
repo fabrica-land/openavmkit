@@ -2516,7 +2516,21 @@ def _finish_df_streets(df: gpd.GeoDataFrame, settings: dict) -> gpd.GeoDataFrame
 
 def _streets_cache_matches_units(df_streets: pd.DataFrame, settings: dict) -> bool:
     _conversion_mult, suffix = _street_unit_config(settings)
-    required_cols = ["key", f"frontage{suffix}_1", f"depth{suffix}_1"]
+    required_cols = ["key"]
+    required_cols.extend(
+        f"{stub}{suffix}_{i}"
+        for stub in _STREET_NUMERIC_STUBS
+        for i in range(1, 5)
+    )
+    required_cols.extend(
+        f"osm_{stub}_{i}"
+        for stub in _STREET_METADATA_STUBS
+        for i in range(1, 5)
+    )
+    required_cols.append(f"osm_total_frontage{suffix}")
+    required_cols.extend(
+        f"osm_frontage_{road_type}{suffix}" for road_type in _STREET_ROAD_TYPES
+    )
     return all(col in df_streets for col in required_cols)
 
 
