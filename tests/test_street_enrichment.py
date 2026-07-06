@@ -129,26 +129,26 @@ def test_enrich_df_streets_empty_ray_returns_default_frontage_columns(
     assert "Ray par is empty, return early" in capsys.readouterr().out
 
 
-def test_enrich_df_streets_roadless_edges_return_default_frontage_columns(
-    tmp_path, monkeypatch, capsys
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        (
+            {"edge_y_m": 500.0, "edges": _empty_edges()},
+            "No street edges found, return early",
+        ),
+        (
+            {"edge_y_m": 30.0, "edge_half_length_m": 0.25},
+            "No street rays generated, return early",
+        ),
+    ],
+)
+def test_enrich_df_streets_early_returns_default_frontage_columns(
+    tmp_path, monkeypatch, capsys, kwargs, message
 ):
-    out = _enrich_streets(
-        tmp_path, monkeypatch, edge_y_m=500.0, edges=_empty_edges()
-    )
+    out = _enrich_streets(tmp_path, monkeypatch, **kwargs)
     _assert_street_contract(out)
     _assert_default_imperial_row(out.iloc[0])
-    assert "No street edges found, return early" in capsys.readouterr().out
-
-
-def test_enrich_df_streets_short_edges_return_default_frontage_columns(
-    tmp_path, monkeypatch, capsys
-):
-    out = _enrich_streets(
-        tmp_path, monkeypatch, edge_y_m=30.0, edge_half_length_m=0.25
-    )
-    _assert_street_contract(out)
-    _assert_default_imperial_row(out.iloc[0])
-    assert "No street rays generated, return early" in capsys.readouterr().out
+    assert message in capsys.readouterr().out
 
 
 def test_enrich_df_streets_roadless_edges_discard_stale_existing_slots(
