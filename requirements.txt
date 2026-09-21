@@ -1,7 +1,7 @@
 azure-storage-blob==12.30.1
 catboost==1.2.10
 numpy==2.4.6
-huggingface-hub==1.30.0
+huggingface-hub==1.31.0
 lightgbm==4.7.0
 markdown==3.10.3
 mgwr==2.2.1
@@ -34,14 +34,14 @@ pygam~=0.12.0
 pandas~=2.3.3
 ipython~=8.12.3
 geopandas~=1.1.4
-matplotlib==3.11.1
+matplotlib==3.11.2
 pyproj~=3.7.2
 shapely~=2.1.2
 azure-core>=1.41.0,<2
 requests>=2.34.2,<3
 joblib~=1.6.0
 scipy>=1.11.4,<1.17
-scikit-learn==1.9.0
-tqdm==4.70.0
+scikit-learn==1.9.1
+tqdm==4.70.1
 rasterio~=1.4.0
 seamless-3dep>=0.4.1,<0.6
