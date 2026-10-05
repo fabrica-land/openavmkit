@@ -1,9 +1,9 @@
-azure-storage-blob==12.30.1
+azure-storage-blob==12.30.3
 catboost==1.2.10
 numpy==2.4.6
-huggingface-hub==1.31.0
+huggingface-hub==1.33.0
 lightgbm==4.7.0
-markdown==3.10.3
+markdown==3.11
 mgwr==2.2.1
 ngboost==0.5.11
 optuna==4.9.0
@@ -13,7 +13,7 @@ pdfkit==1.0.0
 pipreqs==0.5.0
 polars==1.44.2
 pyarrow==22.0.0
-duckdb~=1.5.5
+duckdb~=1.5.6
 pytest==9.1.1
 python-dotenv==1.2.3
 rich==15.0.0
@@ -22,7 +22,7 @@ statsmodels==0.14.6
 xgboost==3.2.0
 xlsxwriter==3.2.9
 census==0.8.27
-layeredcompmodel==0.2.1
+layeredcompmodel==0.3.0
 shap==0.51.0
 numba==0.67.0
 mpld3==0.5.12
