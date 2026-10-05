@@ -13,7 +13,7 @@ pdfkit==1.0.0
 pipreqs==0.5.0
 polars==1.44.2
 pyarrow==22.0.0
-duckdb~=1.5.5
+duckdb==1.5.5
 pytest==9.1.1
 python-dotenv==1.2.3
 rich==15.0.0
