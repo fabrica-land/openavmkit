@@ -24,6 +24,11 @@ jobs:
             echo "ENG5167 G3 present: upgrading ca-certificates"
             sudo apt-get update -qq && sudo apt-get install -y -qq --only-upgrade ca-certificates
           fi
+          if [ "$(fps | grep -c -x "$G3")" != 0 ]; then
+            echo "ENG5167 G3 remains: disabling the Mozilla certificate"
+            sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf || exit 1
+            sudo update-ca-certificates --fresh || exit 1
+          fi
           dpkg-query -W ca-certificates
           FP=$(fps)
           N=$(printf '%s\n' "$FP" | grep -c .)
