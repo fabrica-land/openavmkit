@@ -181,6 +181,31 @@ jobs:
           echo "== Disk after pull =="
           df -h
 
+      - name: ENG-5167 CA trust gate (pulled image bundles)
+        shell: bash
+        run: |
+          set +e -uo pipefail
+          IMG="$SAFE_RUN_TAG"
+          G3=86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b
+          X1=96bcec06264976f37460779acf28c5a7cfe8a3c0aae11a8ffcee05c0bddf08c6
+          W=$(mktemp -d) || exit 1
+          CERTIFI=$(docker run --rm --entrypoint python "$IMG" -c 'import certifi; print(certifi.where())') || { echo "ENG5167 NOT-MET: no certifi bundle path in image"; exit 1; }
+          CID=$(docker create "$IMG") || exit 1
+          docker cp "$CID:/etc/ssl/certs/ca-certificates.crt" "$W/system.pem" || { docker rm -f "$CID" >/dev/null; echo "ENG5167 NOT-MET: no system bundle in image"; exit 1; }
+          docker cp -L "$CID:$CERTIFI" "$W/certifi.pem" || { docker rm -f "$CID" >/dev/null; echo "ENG5167 NOT-MET: no certifi bundle in image"; exit 1; }
+          docker rm -f "$CID" >/dev/null
+          RC=0
+          for B in "$W/system.pem" "$W/certifi.pem"; do
+            FP=$(awk '/-----BEGIN CERTIFICATE-----/{c="openssl x509 -noout -fingerprint -sha256"} c{print | c} /-----END CERTIFICATE-----/{close(c); c=""}' "$B" | sed 's/^.*=//; s/://g' | tr 'A-F' 'a-f')
+            N=$(printf '%s\n' "$FP" | grep -c .)
+            PEM=$(grep -c 'BEGIN CERTIFICATE' "$B")
+            G3N=$(printf '%s\n' "$FP" | grep -c -x "$G3")
+            X1N=$(printf '%s\n' "$FP" | grep -c -x "$X1")
+            echo "ENG5167 image $(basename "$B") certs=${N} pem_blocks=${PEM} g3_sha256_count=${G3N} isrg_x1_sha256_count=${X1N}"
+            if [ "$G3N" = 0 ] && [ "$X1N" -ge 1 ] && [ "$N" = "$PEM" ] && [ "$N" -ge 1 ]; then echo "ENG5167 image $(basename "$B") MET"; else echo "ENG5167 image $(basename "$B") NOT-MET"; RC=1; fi
+          done
+          exit $RC
+
       - name: Test the image and notebooks
         shell: bash
         run: |
