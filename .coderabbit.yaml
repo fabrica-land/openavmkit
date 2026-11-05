@@ -4,7 +4,8 @@ tone_instructions: >
   Be professional: brief and concise. Efficient and direct.
 reviews:
   profile: assertive
-  request_changes_workflow: true
+  auto_approvals:
+    enabled: true
   auto_review:
     enabled: false
     auto_incremental_review: false
