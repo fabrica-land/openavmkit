@@ -1,4 +1,4 @@
-azure-storage-blob==12.31.0
+azure-storage-blob==12.31.1
 catboost==1.2.10
 numpy==2.4.6
 huggingface-hub==1.33.0
@@ -20,7 +20,7 @@ rich==15.0.0
 seaborn==0.13.2
 statsmodels==0.14.6
 xgboost==3.2.0
-xlsxwriter==3.3.0
+xlsxwriter==3.3.1
 census==0.8.27
 layeredcompmodel==0.2.1
 shap==0.51.0
@@ -33,10 +33,10 @@ tabulate~=0.10.0
 pygam~=0.12.0
 pandas~=2.3.3
 ipython~=8.12.3
-geopandas~=1.1.4
+geopandas~=1.2.0
 matplotlib==3.11.2
 pyproj~=3.7.2
-shapely~=2.1.2
+shapely~=2.2.0
 azure-core>=1.41.0,<2
 requests>=2.34.2,<3
 joblib~=1.6.0
