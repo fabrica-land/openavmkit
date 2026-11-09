@@ -3,7 +3,7 @@ language: en-US
 tone_instructions: >
   Be professional: brief and concise. Efficient and direct.
 reviews:
-  profile: assertive
+  profile: chill
   auto_approvals:
     enabled: true
   auto_review:
