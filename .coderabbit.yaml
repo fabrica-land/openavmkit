@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+tone_instructions: >
+  Be professional: brief and concise. Efficient and direct.
+reviews:
+  profile: chill
+  auto_approvals:
+    enabled: true
+  auto_review:
+    enabled: false
+    auto_incremental_review: false
+    auto_pause_after_reviewed_commits: 50
