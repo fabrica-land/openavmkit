@@ -50,3 +50,4 @@ wrap-ups/
 *.before
 *.override
 .env*
+!**/.env.example
