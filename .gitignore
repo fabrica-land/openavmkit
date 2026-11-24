@@ -39,3 +39,15 @@ out/
 .claude/
 research/**/*.log
 research/benchmark/*/
+
+# ENG-5546 AC15: exclude evidence, logs and config copies.
+.knowledge/
+fv-evidence/
+WORK_LOGS/
+wrap-ups/
+.scratch/
+*.bak
+*.before
+*.override
+.env*
+!**/.env.example
